@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<!-- viewport-fit=cover so it fills the iPhone screen edge-to-edge incl. the notch -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<!-- make it run fullscreen when added to the iPhone home screen -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="GoTaxi">
+<meta name="theme-color" content="#E8633C">
+<!-- home-screen icon (inline SVG) -->
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Crect width='180' height='180' rx='40' fill='%231c1917'/%3E%3Ccircle cx='90' cy='78' r='34' fill='none' stroke='%23E8633C' stroke-width='10'/%3E%3Crect x='72' y='112' width='36' height='40' rx='8' fill='%23E8633C'/%3E%3C/svg%3E">
+<title>GoTaxi · 易搭的士</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+:root{
+  --coral:#E8633C; --coral-d:#cf5126; --coral-soft:#fbe9e0;
+  --ink:#1f1b18; --muted:#857a6e; --line:#ece5db;
+  --bg:#faf7f2; --card:#ffffff; --green:#1f9d63; --gold:#e0a32e;
+  --shadow:0 -10px 40px rgba(40,28,18,.16);
+  --safe-t:env(safe-area-inset-top,0px); --safe-b:env(safe-area-inset-bottom,0px);
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue","PingFang HK","Microsoft JhengHei",sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%;width:100%;overflow:hidden;font-family:var(--font);color:var(--ink);background:#000;}
+#map{position:fixed;inset:0;z-index:0;background:#e8eaed;}
+.cn{display:block;font-size:.74em;opacity:.62;font-weight:500;margin-top:1px;}
+
+/* ===== top bar ===== */
+#topbar{position:fixed;top:0;left:0;right:0;z-index:30;padding:calc(var(--safe-t) + 10px) 14px 10px;
+  display:flex;align-items:center;gap:10px;pointer-events:none;}
+#topbar .btn{pointer-events:auto;width:42px;height:42px;border-radius:50%;background:#fff;border:1px solid var(--line);
+  box-shadow:0 4px 16px rgba(40,28,18,.14);display:flex;align-items:center;justify-content:center;font-size:19px;color:var(--ink);}
+#brand{pointer-events:auto;margin-left:auto;background:#1c1917;color:#fff;border-radius:999px;padding:9px 15px;
+  box-shadow:0 4px 16px rgba(40,28,18,.22);display:flex;align-items:center;gap:8px;font-weight:700;font-size:15px;letter-spacing:.2px;}
+#brand .dot{width:9px;height:9px;border-radius:50%;background:var(--coral);box-shadow:0 0 0 4px rgba(232,99,60,.25);}
+#backBtn{display:none;}
+
+/* ===== bottom sheet ===== */
+#sheet{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--card);
+  border-radius:26px 26px 0 0;box-shadow:var(--shadow);padding:8px 18px calc(var(--safe-b) + 18px);
+  transition:transform .42s cubic-bezier(.16,1,.3,1);will-change:transform;max-height:84vh;overflow:hidden;}
+.grip{width:38px;height:5px;border-radius:3px;background:#e3dccf;margin:6px auto 12px;}
+.sh-title{font-size:22px;font-weight:800;letter-spacing:-.3px;}
+.sh-sub{color:var(--muted);font-size:13.5px;margin-top:2px;}
+
+/* rows / fields */
+.field{display:flex;align-items:center;gap:12px;background:#f6f2eb;border:1px solid var(--line);border-radius:16px;
+  padding:13px 14px;margin-top:10px;}
+.field .ic{width:26px;text-align:center;font-size:16px;}
+.field .tx{flex:1;font-size:15.5px;font-weight:600;line-height:1.2;}
+.field .tx small{display:block;color:var(--muted);font-weight:500;font-size:12px;margin-top:1px;}
+.pin-a{color:var(--coral);} .pin-b{color:#1c1917;}
+.connector{height:18px;border-left:2px dotted #d8cfc0;margin-left:26px;}
+
+/* dest list */
+.dest{display:flex;align-items:center;gap:13px;padding:14px 6px;border-bottom:1px solid #f1ebe1;}
+.dest:last-child{border-bottom:0;}
+.dest .ic{width:40px;height:40px;border-radius:12px;background:#f1ece3;display:flex;align-items:center;justify-content:center;font-size:18px;flex:0 0 auto;}
+.dest .tx{flex:1;font-weight:650;font-size:15.5px;}
+.dest .tx small{display:block;color:var(--muted);font-weight:500;font-size:12.5px;}
+.dest .km{color:var(--muted);font-size:12.5px;font-weight:600;}
+
+/* fare + options */
+.farerow{display:flex;align-items:flex-end;justify-content:space-between;margin:16px 2px 4px;}
+.fare-big{font-size:34px;font-weight:850;letter-spacing:-1px;}
+.fare-big small{font-size:15px;font-weight:700;color:var(--muted);}
+.fare-tag{background:var(--coral-soft);color:var(--coral-d);font-weight:750;font-size:12px;padding:6px 10px;border-radius:999px;}
+.chips{display:flex;gap:8px;overflow-x:auto;padding:14px 0 4px;-webkit-overflow-scrolling:touch;}
+.chip{flex:0 0 auto;background:#fff;border:1.5px solid var(--line);border-radius:14px;padding:9px 12px;font-size:13px;font-weight:650;
+  display:flex;align-items:center;gap:6px;color:#3a342e;}
+.chip.on{border-color:var(--coral);background:var(--coral-soft);color:var(--coral-d);}
+.pay{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:16px;padding:12px 14px;margin-top:14px;}
+.pay .logo{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,#15b8a6,#0e8f82);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:13px;}
+.pay .tx{flex:1;font-weight:700;font-size:15px;} .pay .tx small{display:block;color:var(--muted);font-weight:500;font-size:12px;}
+.pay .chg{color:var(--coral);font-weight:700;font-size:13px;}
+
+/* primary button */
+.cta{margin-top:16px;width:100%;border:0;border-radius:18px;background:var(--coral);color:#fff;
+  padding:17px;font-size:17px;font-weight:800;letter-spacing:.2px;display:flex;align-items:center;justify-content:center;gap:10px;
+  box-shadow:0 10px 26px rgba(232,99,60,.38);transition:transform .12s;}
+.cta:active{transform:scale(.975);}
+.cta.dark{background:#1c1917;box-shadow:0 10px 26px rgba(28,25,23,.34);}
+.cta .amt{margin-left:auto;background:rgba(255,255,255,.18);padding:5px 11px;border-radius:999px;font-size:15px;}
+
+/* driver card */
+.driver{display:flex;align-items:center;gap:14px;margin-top:6px;}
+.avatar{width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#f7b733,#e8633c);display:flex;align-items:center;justify-content:center;
+  color:#fff;font-weight:800;font-size:20px;flex:0 0 auto;box-shadow:0 6px 16px rgba(232,99,60,.3);}
+.driver .info{flex:1;} .driver .nm{font-size:18px;font-weight:800;}
+.driver .car{color:var(--muted);font-size:13.5px;font-weight:500;margin-top:1px;}
+.plate{display:inline-block;background:#1c1917;color:#fff;font-weight:800;letter-spacing:1px;font-size:13px;padding:3px 9px;border-radius:7px;margin-top:6px;}
+.rate{background:#1c1917;color:#fff;border-radius:12px;padding:8px 11px;text-align:center;font-weight:800;}
+.rate small{display:block;color:#c9bfae;font-weight:600;font-size:11px;}
+.actions{display:flex;gap:10px;margin-top:16px;}
+.act{flex:1;border:1.5px solid var(--line);border-radius:16px;padding:13px;text-align:center;font-weight:750;font-size:14px;background:#fff;color:#3a342e;
+  display:flex;flex-direction:column;align-items:center;gap:3px;}
+.act .ic{font-size:18px;}
+.eta-pill{position:absolute;top:-14px;left:50%;transform:translateX(-50%);background:#1c1917;color:#fff;font-weight:800;
+  font-size:13.5px;padding:8px 16px;border-radius:999px;box-shadow:0 8px 20px rgba(28,25,23,.3);white-space:nowrap;}
+.statusline{display:flex;align-items:center;gap:9px;font-weight:800;font-size:16px;margin:2px 0 2px;}
+.statusline .pulse{width:11px;height:11px;border-radius:50%;background:var(--green);box-shadow:0 0 0 0 rgba(31,157,99,.5);animation:pulse 1.6s infinite;}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(31,157,99,.5)}70%{box-shadow:0 0 0 12px rgba(31,157,99,0)}100%{box-shadow:0 0 0 0 rgba(31,157,99,0)}}
+
+/* meter */
+.meter{display:flex;align-items:baseline;justify-content:space-between;background:#f6f2eb;border:1px solid var(--line);border-radius:16px;padding:14px;margin-top:14px;}
+.meter .m{font-size:30px;font-weight:850;letter-spacing:-1px;} .meter .m small{font-size:14px;color:var(--muted);font-weight:700;}
+.meter .r{text-align:right;color:var(--muted);font-size:12.5px;font-weight:600;line-height:1.5;}
+
+/* matching radar */
+#radar{position:fixed;inset:0;z-index:15;display:none;align-items:center;justify-content:center;pointer-events:none;}
+#radar .ring{position:absolute;width:90px;height:90px;border-radius:50%;border:2px solid var(--coral);opacity:0;animation:radar 2.4s ease-out infinite;}
+#radar .ring:nth-child(2){animation-delay:.8s;} #radar .ring:nth-child(3){animation-delay:1.6s;}
+@keyframes radar{0%{transform:scale(.4);opacity:.9}100%{transform:scale(5.2);opacity:0}}
+#radar .car{width:62px;height:62px;border-radius:50%;background:#1c1917;display:flex;align-items:center;justify-content:center;font-size:28px;box-shadow:0 10px 30px rgba(0,0,0,.3);}
+
+/* receipt / breakdown */
+.brk{margin-top:6px;} .brk .li{display:flex;justify-content:space-between;padding:9px 2px;font-size:14.5px;color:#3a342e;border-bottom:1px solid #f3ede3;}
+.brk .li.tot{border-bottom:0;font-weight:850;font-size:18px;padding-top:13px;color:var(--ink);}
+.brk .li small{color:var(--muted);}
+.stars{display:flex;justify-content:center;gap:8px;margin:16px 0 4px;}
+.stars span{font-size:34px;color:#e1d8c9;transition:transform .12s,color .12s;} .stars span.on{color:var(--gold);transform:scale(1.08);}
+
+/* success check */
+#done{position:fixed;inset:0;z-index:40;background:var(--coral);display:none;flex-direction:column;align-items:center;justify-content:center;color:#fff;gap:18px;}
+#done .ck{width:108px;height:108px;border-radius:50%;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center;}
+#done svg{width:60px;height:60px;} #done .ck circle,#done .ck path{stroke:#fff;stroke-width:7;fill:none;stroke-linecap:round;stroke-linejoin:round;}
+#done .ck circle{stroke-dasharray:289;stroke-dashoffset:289;animation:dash .6s ease forwards;}
+#done .ck path{stroke-dasharray:60;stroke-dashoffset:60;animation:dash .4s .45s ease forwards;}
+@keyframes dash{to{stroke-dashoffset:0}}
+#done .t{font-size:24px;font-weight:850;text-align:center;} #done .s{opacity:.9;font-size:14px;margin-top:-10px;}
+
+/* splash */
+#splash{position:fixed;inset:0;z-index:60;background:#1c1917;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;
+  transition:opacity .6s;color:#fff;}
+#splash .mk{width:96px;height:96px;border-radius:26px;background:#23201d;display:flex;align-items:center;justify-content:center;box-shadow:0 16px 40px rgba(0,0,0,.5);}
+#splash .mk svg{width:60px;height:60px;}
+#splash .wm{font-size:26px;font-weight:850;letter-spacing:.5px;} #splash .wm .o{color:var(--coral);}
+#splash .tg{color:#9b9082;font-size:13px;margin-top:-10px;}
+#splash .ld{width:34px;height:34px;border:3px solid rgba(255,255,255,.18);border-top-color:var(--coral);border-radius:50%;animation:spin 1s linear infinite;margin-top:8px;}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.taxi-ico{background:none;border:0;}
+.taxi-ico .b{width:30px;height:30px;border-radius:9px;background:var(--coral);display:flex;align-items:center;justify-content:center;
+  font-size:16px;box-shadow:0 4px 12px rgba(0,0,0,.3);transform:translate(-2px,-2px);}
+.idle-ico .b{width:24px;height:24px;border-radius:7px;background:#1c1917;font-size:13px;opacity:.92;}
+.pin-ico{background:none;border:0;font-size:26px;filter:drop-shadow(0 4px 6px rgba(0,0,0,.25));}
+
+.replay{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--safe-b) + 16px);z-index:45;
+  background:#1c1917;color:#fff;border:0;border-radius:999px;padding:12px 20px;font-weight:750;font-size:14px;display:none;align-items:center;gap:8px;box-shadow:0 8px 22px rgba(0,0,0,.3);}
+.hidden{display:none!important;}
+.demo-flag{position:fixed;top:calc(var(--safe-t) + 8px);left:50%;transform:translateX(-50%);z-index:31;
+  background:rgba(28,25,23,.78);color:#fff;font-size:10.5px;font-weight:700;letter-spacing:1px;padding:4px 10px;border-radius:999px;pointer-events:none;}
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<!-- radar overlay for matching -->
+<div id="radar"><div class="ring"></div><div class="ring"></div><div class="ring"></div><div class="car">🚕</div></div>
+
+<!-- top bar -->
+<div id="topbar">
+  <div class="btn" id="backBtn">‹</div>
+  <div class="btn" id="menuBtn">☰</div>
+  <div id="brand"><span class="dot"></span>GoTaxi</div>
+</div>
+<div class="demo-flag">PROTOTYPE · DEMO</div>
+
+<!-- bottom sheet (content swapped by JS) -->
+<div id="sheet"><div class="grip"></div><div id="sheetBody"></div></div>
+
+<button class="replay" id="replay">↻&nbsp; Replay demo · 重新示範</button>
+
+<!-- success splash -->
+<div id="done">
+  <div class="ck"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="46"/><path d="M30 52 L45 67 L72 36"/></svg></div>
+  <div class="t" id="doneT">Paid · 已付款</div>
+  <div class="s" id="doneS">HK$96.00 · Octopus 八達通</div>
+</div>
+
+<!-- splash -->
+<div id="splash">
+  <div class="mk"><svg viewBox="0 0 100 100"><circle cx="50" cy="42" r="22" fill="none" stroke="#E8633C" stroke-width="8"/><rect x="38" y="64" width="24" height="26" rx="6" fill="#E8633C"/></svg></div>
+  <div class="wm">Go<span class="o">Taxi</span></div>
+  <div class="tg">易搭的士 · Hong Kong</div>
+  <div class="ld"></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+/* ============================================================
+   GoTaxi — clickable prototype (passenger app)
+   Single-file demo. No backend. Map = Leaflet + CartoDB tiles.
+   Edit BRAND / trip data below to rebrand or change the route.
+   ============================================================ */
+const BRAND = 'GoTaxi';
+
+// --- trip data (Hong Kong: Tsim Sha Tsui -> Central, cross-harbour) ---
+const PICKUP = [22.2942,114.1686], DEST = [22.2855,114.1577];
+const DRIVER_START = [22.2986,114.1742];
+const PATH_TO_PICKUP = [[22.2986,114.1742],[22.2968,114.1712],[22.2951,114.1694],PICKUP];
+const PATH_TRIP = [PICKUP,[22.2905,114.1701],[22.2868,114.1689],[22.2844,114.1641],[22.2841,114.1599],DEST];
+const IDLE = [[22.2960,114.1701],[22.2929,114.1661],[22.2977,114.1684],[22.2918,114.1712],[22.2952,114.1731],[22.2899,114.1672]];
+const FARE = 96, FLAGFALL = 29;
+
+let map, carMarker, pickMarker, destMarker, routeLine, idleMarkers=[];
+const $ = s=>document.querySelector(s), body=$('#sheetBody');
+
+/* ---------- map ---------- */
+function initMap(){
+  try{
+    map = L.map('map',{zoomControl:false,attributionControl:false}).setView(PICKUP,15);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{maxZoom:19,subdomains:'abcd'}).addTo(map);
+    L.control.attribution({prefix:false,position:'bottomleft'}).addTo(map).addAttribution('© OpenStreetMap, © CARTO');
+    idleMarkers = IDLE.map(p=>L.marker(p,{icon:L.divIcon({className:'',html:'<div class="taxi-ico idle-ico"><div class="b">🚕</div></div>',iconSize:[24,24]})}).addTo(map));
+  }catch(e){ console.warn('map init failed',e); }
+}
+const carIcon = L.divIcon ? L.divIcon({className:'',html:'<div class="taxi-ico"><div class="b">🚕</div></div>',iconSize:[30,30],iconAnchor:[15,15]}) : null;
+const pinIcon = (e)=>L.divIcon({className:'',html:`<div class="pin-ico">${e}</div>`,iconSize:[28,34],iconAnchor:[14,30]});
+
+function drawTrip(){
+  if(!map) return;
+  pickMarker = L.marker(PICKUP,{icon:pinIcon('📍')}).addTo(map);
+  destMarker = L.marker(DEST,{icon:pinIcon('🏁')}).addTo(map);
+  routeLine = L.polyline(PATH_TRIP,{color:'#E8633C',weight:5,opacity:.85,lineCap:'round'}).addTo(map);
+  map.fitBounds(L.latLngBounds(PICKUP,DEST).pad(.55),{paddingBottomRight:[0,window.innerHeight*0.42]});
+}
+function clearRoute(){ if(routeLine&&map){map.removeLayer(routeLine);} }
+
+/* animate a marker along a path of [lat,lng] over ms; cb each frame(0..1); done() */
+let rafId=null;
+function animateAlong(path, ms, frame, done){
+  // cumulative distances
+  const segs=[]; let total=0;
+  for(let i=0;i<path.length-1;i++){const d=Math.hypot(path[i+1][0]-path[i][0],path[i+1][1]-path[i][1]);segs.push(d);total+=d;}
+  const t0=performance.now();
+  cancelAnimationFrame(rafId);
+  function step(now){
+    let p=Math.min(1,(now-t0)/ms), dist=p*total, acc=0, i=0;
+    while(i<segs.length && acc+segs[i]<dist){acc+=segs[i];i++;}
+    const segP = segs[i]? (dist-acc)/segs[i] : 0;
+    const a=path[Math.min(i,path.length-1)], b=path[Math.min(i+1,path.length-1)];
+    const lat=a[0]+(b[0]-a[0])*segP, lng=a[1]+(b[1]-a[1])*segP;
+    if(carMarker&&map) carMarker.setLatLng([lat,lng]);
+    frame&&frame(p,[lat,lng]);
+    if(p<1) rafId=requestAnimationFrame(step); else done&&done();
+  }
+  rafId=requestAnimationFrame(step);
+}
+
+/* ---------- sheet helpers ---------- */
+function setSheet(html){ body.innerHTML=html; }
+function showBack(on){ $('#backBtn').style.display=on?'flex':'none'; $('#menuBtn').style.display=on?'none':'flex'; }
+
+/* ---------- screens / state machine ---------- */
+const S = {};
+let cancelTimers=[];
+function later(fn,ms){const id=setTimeout(fn,ms);cancelTimers.push(id);return id;}
+function clearLater(){cancelTimers.forEach(clearTimeout);cancelTimers=[];}
+
+S.home = ()=>{
+  showBack(false); $('#radar').style.display='none'; $('#replay').style.display='none';
+  if(map){ idleMarkers.forEach(m=>m.setOpacity?m.setOpacity(1):0); }
+  setSheet(`
+    <div class="sh-title">Where to?<span class="cn">去邊度？</span></div>
+    <div class="sh-sub">12 taxis nearby · 附近有 12 部的士</div>
+    <div class="field"><div class="ic pin-a">📍</div><div class="tx">Tsim Sha Tsui Star Ferry<small>尖沙咀天星碼頭 · current location</small></div></div>
+    <div class="connector"></div>
+    <div class="field" id="toDest"><div class="ic pin-b">⬛</div><div class="tx" style="color:#9b9082">Enter destination<small>輸入目的地</small></div><div style="color:var(--coral);font-size:22px">›</div></div>
+    <button class="cta dark" id="toDest2">Set destination<span class="cn" style="opacity:.8">設定目的地</span></button>
+  `);
+  $('#toDest').onclick=$('#toDest2').onclick=()=>S.dest();
+};
+
+S.dest = ()=>{
+  showBack(true);
+  const list=[
+    ['🏢','IFC, Central','中環國際金融中心','5.1 km'],
+    ['✈️','HK Int’l Airport','香港國際機場','34 km'],
+    ['🛍️','Causeway Bay','銅鑼灣時代廣場','6.4 km'],
+    ['🏥','Queen Mary Hospital','瑪麗醫院','9.2 km'],
+  ];
+  setSheet(`
+    <div class="sh-title">Choose destination<span class="cn">選擇目的地</span></div>
+    <div class="field"><div class="ic">🔍</div><div class="tx" style="color:#9b9082">Search address…<small>搜尋地址（中 / 英）</small></div></div>
+    <div style="margin-top:8px">${list.map((d,i)=>`
+      <div class="dest" data-i="${i}"><div class="ic">${d[0]}</div><div class="tx">${d[1]}<small>${d[2]}</small></div><div class="km">${d[3]}</div></div>`).join('')}</div>
+  `);
+  document.querySelectorAll('.dest').forEach(el=>el.onclick=()=>{ drawTrip(); S.confirm(); });
+};
+
+let opt={tunnel:true,tip:0};
+S.confirm = ()=>{
+  showBack(true);
+  const total = FARE + opt.tip;
+  setSheet(`
+    <div class="field"><div class="ic pin-a">📍</div><div class="tx">Tsim Sha Tsui Star Ferry<small>尖沙咀天星碼頭</small></div></div>
+    <div class="connector"></div>
+    <div class="field"><div class="ic pin-b">🏁</div><div class="tx">IFC, Central<small>中環國際金融中心 · 5.1 km</small></div></div>
+    <div class="farerow"><div class="fare-big"><small>HK$</small>${total}</div><div class="fare-tag">Metered · 咪錶 · ~14 min</div></div>
+    <div class="chips">
+      <div class="chip on" data-k="tunnel">🚇 Cross-Harbour 紅隧</div>
+      <div class="chip" data-k="t10">＋$10 Tip 貼士</div>
+      <div class="chip" data-k="t30">＋$30 Tip 貼士</div>
+      <div class="chip">5-seat 五座</div>
+    </div>
+    <div class="pay"><div class="logo">八</div><div class="tx">Octopus<small>八達通 · ····8842</small></div><div class="chg">Change 更改</div></div>
+    <button class="cta" id="call">Call taxi · 召的士 <span class="amt">$${total}</span></button>
+  `);
+  document.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{
+    const k=c.dataset.k;
+    if(k==='t10'){opt.tip=opt.tip===10?0:10;}
+    else if(k==='t30'){opt.tip=opt.tip===30?0:30;}
+    else if(k){c.classList.toggle('on');}
+    S.confirm();
+  });
+  $('#call').onclick=()=>S.matching();
+};
+
+S.matching = ()=>{
+  showBack(false); $('#radar').style.display='flex';
+  if(map){ idleMarkers.forEach(m=>m.setOpacity&&m.setOpacity(.5)); map.panTo(PICKUP,{animate:true}); }
+  setSheet(`
+    <div class="sh-title">Finding your taxi…<span class="cn">派緊單到公海…</span></div>
+    <div class="sh-sub">Broadcasting to nearby drivers · 廣播畀附近司機</div>
+    <div class="statusline" style="margin-top:14px"><span class="pulse"></span>Tip $${opt.tip} attached · 已加 $${opt.tip} 貼士</div>
+    <button class="cta dark" id="cancel" style="margin-top:18px;background:#f1ece3;color:#857a6e;box-shadow:none">Cancel · 取消</button>
+  `);
+  $('#cancel').onclick=()=>S.confirm();
+  later(()=>S.enroute(), 2900);
+};
+
+S.enroute = ()=>{
+  $('#radar').style.display='none'; showBack(false);
+  if(map){ carMarker = L.marker(DRIVER_START,{icon:carIcon}).addTo(map); }
+  let eta=5;
+  setSheet(`
+    <div style="position:relative">
+      <div class="eta-pill" id="eta">Arriving in ~5 min · 約 5 分鐘到</div>
+      <div class="statusline"><span class="pulse"></span>Driver on the way<span class="cn" style="margin:0;opacity:.7">司機正前往上車點</span></div>
+      <div class="driver" style="margin-top:14px">
+        <div class="avatar">陳</div>
+        <div class="info"><div class="nm">Chan · 陳師傅</div><div class="car">Toyota Comfort · Red urban 紅的 🔴</div><span class="plate">LV 8842</span></div>
+        <div class="rate">4.9★<small>2,140 trips</small></div>
+      </div>
+      <div class="actions">
+        <div class="act"><span class="ic">📞</span>Call 致電</div>
+        <div class="act"><span class="ic">💬</span>Message 訊息</div>
+        <div class="act" id="cxl"><span class="ic">✕</span>Cancel 取消</div>
+      </div>
+    </div>`);
+  $('#cxl').onclick=()=>S.confirm();
+  animateAlong(PATH_TO_PICKUP, 6500, (p)=>{ const m=Math.max(1,Math.round((1-p)*5)); $('#eta')&&($('#eta').textContent=`Arriving in ~${m} min · 約 ${m} 分鐘到`); },
+    ()=>S.arrived());
+};
+
+S.arrived = ()=>{
+  setSheet(`
+    <div class="statusline"><span class="pulse" style="background:var(--coral)"></span>Your taxi has arrived<span class="cn" style="margin:0;opacity:.7">的士已到達上車點</span></div>
+    <div class="driver" style="margin-top:14px">
+      <div class="avatar">陳</div>
+      <div class="info"><div class="nm">Chan · 陳師傅</div><div class="car">Red urban taxi 紅的 · waiting</div><span class="plate">LV 8842</span></div>
+      <div class="rate">4.9★<small>2,140 trips</small></div>
+    </div>
+    <button class="cta" id="board">I'm in — start trip · 已上車，開始行程</button>
+  `);
+  $('#board').onclick=()=>S.ontrip();
+  later(()=>{ if($('#board')) S.ontrip(); }, 4200);
+};
+
+S.ontrip = ()=>{
+  showBack(false);
+  setSheet(`
+    <div class="statusline"><span class="pulse"></span>On trip to Central<span class="cn" style="margin:0;opacity:.7">行程中 · 前往中環</span></div>
+    <div class="meter">
+      <div class="m" id="mt"><small>HK$</small>${FLAGFALL}</div>
+      <div class="r">Cross-Harbour Tunnel 紅隧<br><span id="mleft">~14 min left · 仲有約 14 分鐘</span></div>
+    </div>
+    <div class="pay" style="margin-top:14px"><div class="logo">八</div><div class="tx">Octopus<small>八達通 · auto-pay on arrival 到埗自動付款</small></div></div>
+  `);
+  animateAlong(PATH_TRIP, 8200, (p)=>{
+    const amt=Math.round(FLAGFALL+(FARE-FLAGFALL)*p);
+    $('#mt')&&($('#mt').innerHTML=`<small>HK$</small>${amt}`);
+    const m=Math.max(0,Math.round((1-p)*14)); $('#mleft')&&($('#mleft').textContent=`~${m} min left · 仲有約 ${m} 分鐘`);
+  }, ()=>S.pay());
+};
+
+S.pay = ()=>{
+  showBack(false);
+  const total=FARE+opt.tip;
+  setSheet(`
+    <div class="sh-title">Trip complete<span class="cn">行程完成</span></div>
+    <div class="sh-sub">Tsim Sha Tsui → Central · 14 min · 5.1 km</div>
+    <div class="brk">
+      <div class="li"><span>Metered fare 咪錶車費</span><span>HK$${FARE-10}</span></div>
+      <div class="li"><span>Cross-Harbour Tunnel 紅隧</span><span>HK$10</span></div>
+      <div class="li"><span>Tip 貼士</span><span>HK$${opt.tip}</span></div>
+      <div class="li tot"><span>Total 總額</span><span>HK$${total}</span></div>
+    </div>
+    <div class="pay" style="margin-top:14px"><div class="logo">八</div><div class="tx">Octopus 八達通<small>····8842</small></div><div class="chg">Change 更改</div></div>
+    <button class="cta" id="payb">Pay HK$${total} · 付款</button>
+  `);
+  $('#payb').onclick=()=>{
+    $('#doneT').textContent='Paid · 已付款';
+    $('#doneS').textContent=`HK$${total}.00 · Octopus 八達通`;
+    $('#done').style.display='flex';
+    later(()=>{ $('#done').style.display='none'; S.receipt(); }, 1700);
+  };
+};
+
+S.receipt = ()=>{
+  showBack(false); $('#replay').style.display='flex';
+  const total=FARE+opt.tip; let rating=5;
+  setSheet(`
+    <div class="sh-title">Rate your trip<span class="cn">為行程評分</span></div>
+    <div class="sh-sub">Chan · 陳師傅 · Red urban taxi 紅的</div>
+    <div class="stars" id="stars">${[1,2,3,4,5].map(i=>`<span data-i="${i}" class="${i<=5?'on':''}">★</span>`).join('')}</div>
+    <div class="brk"><div class="li"><span>Paid 已付 · Octopus 八達通</span><span style="color:var(--green);font-weight:800">HK$${total}.00 ✓</span></div></div>
+    <button class="cta dark" id="fin">Done · 完成</button>
+  `);
+  const stars=document.querySelectorAll('#stars span');
+  stars.forEach(s=>s.onclick=()=>{rating=+s.dataset.i;stars.forEach(x=>x.classList.toggle('on',+x.dataset.i<=rating));});
+  $('#fin').onclick=()=>reset();
+};
+
+function reset(){
+  clearLater(); cancelAnimationFrame(rafId);
+  if(map){ [carMarker,pickMarker,destMarker,routeLine].forEach(m=>{try{map.removeLayer(m)}catch(e){}}); carMarker=null; map.setView(PICKUP,15,{animate:true}); }
+  opt={tunnel:true,tip:0};
+  S.home();
+}
+$('#replay').onclick=reset;
+$('#backBtn').onclick=()=>{ // simple contextual back
+  const t=$('.sh-title')?.textContent||''; clearLater(); cancelAnimationFrame(rafId);
+  if(t.includes('Choose')) S.home(); else { clearRoute(); reset(); }
+};
+$('#menuBtn').onclick=()=>{}; // decorative in demo
+$('#brand').onclick=()=>{};
+
+/* ---------- boot ---------- */
+window.addEventListener('load',()=>{
+  initMap();
+  S.home();
+  setTimeout(()=>{ const sp=$('#splash'); sp.style.opacity='0'; setTimeout(()=>sp.style.display='none',650); }, 1500);
+});
+</script>
+</body>
+</html>
