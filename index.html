@@ -261,6 +261,9 @@ button{font-family:inherit;}
   <div class="grow"></div>
 </div>
 
+<!-- ===== INFO OVERLAY (history / promos / help / saved) ===== -->
+<div class="flow" id="fInfo"><div style="display:flex;align-items:center;gap:12px"><div class="back2" id="infoBack">‹</div><h1 style="font-size:22px" id="infoTitle"></h1></div><div id="infoBody" style="margin-top:14px"></div></div>
+
 <!-- ===== SPLASH ===== -->
 <div id="splash">
   <div class="mk"><svg viewBox="0 0 100 100"><circle cx="50" cy="42" r="22" fill="none" stroke="#E8633C" stroke-width="8"/><rect x="38" y="64" width="24" height="26" rx="6" fill="#E8633C"/></svg></div>
@@ -278,8 +281,11 @@ button{font-family:inherit;}
 <div class="menu" id="menu"><div class="panel">
   <div style="font-weight:850;font-size:19px" id="menuName">GoTaxi</div>
   <div style="color:var(--muted);font-size:13px;margin-bottom:6px" id="menuRole"></div>
-  <div class="mi" id="miSwitch"><span class="ic">🔄</span>Switch role · 切換身分</div>
+  <div class="mi" id="miSaved"><span class="ic">⭐</span>Saved places · 收藏地點</div>
   <div class="mi" id="miHistory"><span class="ic">🧾</span>Trip history · 行程紀錄</div>
+  <div class="mi" id="miPromo"><span class="ic">🎟️</span>Promotions · 優惠</div>
+  <div class="mi" id="miHelp"><span class="ic">🛟</span>Help &amp; safety · 幫助與安全</div>
+  <div class="mi" id="miSwitch"><span class="ic">🔄</span>Switch role · 切換身分</div>
   <div class="mi" id="miClose"><span class="ic">✕</span>Close · 關閉</div>
 </div></div>
 
@@ -310,6 +316,12 @@ const PLACES = [
   {n:'Sha Tin Town Plaza',c:'沙田新城市廣場',ll:[22.3820,114.1888]},
 ];
 const HOME_PICKUP = {n:'Tsim Sha Tsui Star Ferry', c:'尖沙咀天星碼頭', ll:[22.2942,114.1686]};
+const SAVED = {
+  home:{n:'Home · Causeway Bay', c:'住宅 · 銅鑼灣', ll:[22.2800,114.1846]},
+  work:{n:'Work · IFC Central', c:'公司 · 中環國際金融中心', ll:[22.2851,114.1582]},
+  air:{n:'HK Int’l Airport', c:'香港國際機場', ll:[22.3160,113.9365]},
+};
+const PROMOS={'HK15':15,'NEW20':20,'FLY10':10};
 
 /* ---------------- map + geo helpers ---------------- */
 let map, layers=[], idle=[];
@@ -416,7 +428,17 @@ $('#menuBtn').onclick=()=>$('#menu').classList.add('on');
 $('#miClose').onclick=()=>$('#menu').classList.remove('on');
 $('#menu').onclick=e=>{ if(e.target.id==='menu')$('#menu').classList.remove('on'); };
 $('#miSwitch').onclick=()=>{ LS.removeItem('gt_role'); $('#menu').classList.remove('on'); clearTimers();clearLayers();appUI(false); $('#brand').classList.remove('online'); show('fRole'); };
-$('#miHistory').onclick=()=>{ $('#menu').classList.remove('on'); toast('Demo: no past trips yet · 示範：暫無紀錄'); };
+function infoScreen(title,html){ $('#infoTitle').textContent=title; $('#infoBody').innerHTML=html; $('#menu').classList.remove('on'); appUI(false); show('fInfo'); }
+$('#infoBack').onclick=()=>{ show(''); appUI(true); };
+$('#miHistory').onclick=()=>infoScreen('Trip history 行程紀錄', HISTORY.length?HISTORY.map(h=>`<div class="dest"><div class="ic">🧾</div><div class="tx"><b>${h.from} → ${h.to}</b><small>${h.km} km · ${h.pay} · ${h.driver}</small></div><div class="km">HK$${h.total}</div></div>`).join(''):'<div class="note">No trips yet — book a ride first. 暫無紀錄，先試搭一程。</div>');
+$('#miSaved').onclick=()=>infoScreen('Saved places 收藏地點', Object.keys(SAVED).map(k=>{const p=SAVED[k];return `<div class="dest"><div class="ic">${k==='home'?'🏠':k==='work'?'💼':'✈️'}</div><div class="tx"><b>${p.n}</b><small>${p.c||''}</small></div><div class="edit">Edit 更改</div></div>`}).join(''));
+$('#miPromo').onclick=()=>infoScreen('Promotions 優惠', Object.keys(PROMOS).map(k=>`<div class="dest"><div class="ic">🎟️</div><div class="tx"><b>${k}</b><small>−${PROMOS[k]}% off your next fare 下程車費折扣</small></div></div>`).join('')+'<div class="note" style="margin-top:10px">Apply a code on the booking screen → "Promo code". 喺落單畫面輸入。</div>');
+$('#miHelp').onclick=()=>infoScreen('Help & safety 幫助與安全', `
+  <div class="dest"><div class="ic">📞</div><div class="tx"><b>WhatsApp support 客服</b><small>24/7 in-app help 即時支援</small></div></div>
+  <div class="dest"><div class="ic">📤</div><div class="tx"><b>Share live trip 分享行程</b><small>send your route to a contact</small></div></div>
+  <div class="dest"><div class="ic">🆘</div><div class="tx"><b>Emergency SOS 緊急求助</b><small>999 + share location 報警及分享位置</small></div></div>
+  <div class="dest"><div class="ic">🧾</div><div class="tx"><b>Report overcharge 報告濫收</b><small>dispute a fare 投訴車費</small></div></div>
+  <div class="dest"><div class="ic">🌐</div><div class="tx"><b>Language 語言</b><small>English · 繁體中文 · 简体中文</small></div></div>`);
 $('#replay').onclick=()=>{ clearTimers();clearLayers(); $('#brand').classList.remove('online'); ROLE==='driver'?Driver.start():Passenger.start(); };
 $('#backBtn').onclick=()=>{ clearTimers(); ROLE==='driver'?Driver.start():Passenger.start(); };
 
@@ -456,7 +478,8 @@ function choosePlace(p){ show(''); appUI(true); $('#mapPick').style.display='non
 /* ============================================================
    PASSENGER APP
    ============================================================ */
-let curPickup=null, curDest=null, opt={tunnel:'auto',tip:0,seats:5,vehicle:'normal',sched:false,pay:'octopus',fleet:false};
+let curPickup=null, curDest=null, opt={tunnel:'auto',tip:0,seats:5,vehicle:'normal',sched:false,pay:'octopus',fleet:false,promo:null,pmode:'meter'};
+let HISTORY=[];
 const PAYS={octopus:['八','八達通 Octopus','#15b8a6'],payme:['P','PayMe','#d4006a'],wechat:['W','WeChat Pay','#16b34a'],alipay:['A','AlipayHK','#1677ff'],cash:['$','Cash 現金','#857a6e']};
 let lastRoute=null;
 const Passenger = {
@@ -480,9 +503,17 @@ const Passenger = {
       <div class="field tap" id="setPick"><div class="ic pin-a">📍</div><div class="tx">${curPickup.n}<small>${curPickup.c||'current location'}</small></div><span class="edit">Edit 更改</span></div>
       <div class="connector"></div>
       <div class="field tap" id="setDest"><div class="ic pin-b">⬛</div><div class="tx" style="color:#9b9082">Enter destination<small>輸入目的地</small></div><div style="color:var(--coral);font-size:22px">›</div></div>
+      <div class="chips" style="margin-top:12px">
+        <div class="chip" data-sp="home">🏠 Home 住宅</div>
+        <div class="chip" data-sp="work">💼 Work 公司</div>
+        <div class="chip" data-sp="air">✈️ Airport 機場</div>
+        <div class="chip" id="favBtn">⭐ Saved 收藏</div>
+      </div>
     `);
     $('#setPick').onclick=()=>openPicker('pickup',p=>{curPickup=p;this.drawIdle();if(map)map.panTo(p.ll);this.home();});
     $('#setDest').onclick=()=>openPicker('dest',async p=>{curDest=p; await this.route(); this.confirm();});
+    document.querySelectorAll('.chip[data-sp]').forEach(c=>c.onclick=async()=>{const p=SAVED[c.dataset.sp];curDest={n:p.n,c:p.c,ll:p.ll};await this.route();this.confirm();});
+    $('#favBtn').onclick=()=>openPicker('dest',async p=>{curDest=p;await this.route();this.confirm();});
   },
   async route(){ clearLayers();
     if(map){ addLayer(L.marker(curPickup.ll,{icon:pinIcon('📍')})); addLayer(L.marker(curDest.ll,{icon:pinIcon('🏁')})); }
@@ -493,14 +524,17 @@ const Passenger = {
   },
   confirm(){ showBack(true);
     const tunnel = opt.tunnel!=='none' && lastRoute.km>3.5;
-    const fare = fareFor(lastRoute.km, tunnel); const total=fare+opt.tip;
+    const fare = fareFor(lastRoute.km, tunnel);
+    const disc = PROMOS[opt.promo]||0, discAmt=Math.round(fare*disc/100);
+    const total = fare - discAmt + opt.tip;
     const pay=PAYS[opt.pay];
     setSheet(`
       <div class="field"><div class="ic pin-a">📍</div><div class="tx">${curPickup.n}<small>${curPickup.c||''}</small></div></div>
       <div class="connector"></div>
       <div class="field"><div class="ic pin-b">🏁</div><div class="tx">${curDest.n}<small>${curDest.c||''} · ${lastRoute.km.toFixed(1)} km</small></div></div>
-      <div class="farerow"><div class="fare-big"><small>HK$</small>${total}</div><div class="fare-tag">Metered · 咪錶 · ~${lastRoute.min} min</div></div>
-      <div class="optrow" id="optMore"><div class="ic">⚙️</div><div class="tx">Ride options<small>隧道 / 座位 / 車種 / 預約</small></div><div class="v">${this.optSummary(tunnel)} ›</div></div>
+      <div class="farerow"><div class="fare-big"><small>HK$</small>${total}${discAmt?` <span style="font-size:14px;color:#b6ab9d;text-decoration:line-through;font-weight:700">$${fare+opt.tip}</span>`:''}</div><div class="fare-tag">⚡ Fastest route · 最快路線 · ~${lastRoute.min} min</div></div>
+      <div class="optrow" id="optMore"><div class="ic">⚙️</div><div class="tx">Ride options<small>隧道 / 座位 / 車種 / 預約 / 價格模式</small></div><div class="v">${this.optSummary(tunnel)} ›</div></div>
+      <div class="optrow" id="promoRow"><div class="ic">🎟️</div><div class="tx">Promo code<small>優惠碼</small></div><div class="v">${opt.promo?opt.promo+' · -'+disc+'%':'Add 加'} ›</div></div>
       <div class="chips">
         <div class="chip ${opt.tip===0?'on':''}" data-tip="0">No tip 無貼士</div>
         <div class="chip ${opt.tip===10?'on':''}" data-tip="10">＋$10 貼士</div>
@@ -512,8 +546,19 @@ const Passenger = {
     `);
     document.querySelectorAll('.chip[data-tip]').forEach(c=>c.onclick=()=>{opt.tip=+c.dataset.tip;this.confirm();});
     $('#optMore').onclick=()=>this.options();
+    $('#promoRow').onclick=()=>this.promoPicker();
     $('#payRow').onclick=()=>this.payPicker();
     $('#call').onclick=()=>this.match(total);
+  },
+  promoPicker(){ showBack(true);
+    setSheet(`<div class="sh-title">Promo code<span class="cn">優惠碼</span></div>
+      <input class="inp" id="promoIn" placeholder="Enter code 輸入優惠碼" value="${opt.promo||''}" style="margin-top:14px;text-transform:uppercase">
+      <div style="margin-top:6px">${Object.keys(PROMOS).map(k=>`<div class="dest" data-k="${k}"><div class="ic">🎟️</div><div class="tx"><b>${k}</b><small>−${PROMOS[k]}% off the fare 車費折扣</small></div></div>`).join('')}</div>
+      <button class="cta" id="applyPromo" style="margin-top:12px">Apply · 套用</button>
+      <button class="cta ghost" id="clrPromo" style="margin-top:10px">Remove code · 清除</button>`);
+    document.querySelectorAll('.dest[data-k]').forEach(el=>el.onclick=()=>{$('#promoIn').value=el.dataset.k;});
+    $('#applyPromo').onclick=()=>{const c=($('#promoIn').value||'').trim().toUpperCase();if(PROMOS[c]){opt.promo=c;toast('Promo applied · 已套用 '+c);}else if(c){toast('Invalid code · 無效優惠碼');}this.confirm();};
+    $('#clrPromo').onclick=()=>{opt.promo=null;this.confirm();};
   },
   optSummary(tunnel){ const t={auto:'Auto 自動',cross:'紅隧',western:'西隧',eastern:'東隧',none:'No tunnel'}[opt.tunnel]||'Auto';
     return `${opt.seats}-seat · ${tunnel?t:'No toll'}`; },
@@ -527,6 +572,8 @@ const Passenger = {
       <div class="seg" id="st">${[5,6].map(s=>`<div class="o ${opt.seats===s?'on':''}" data-s="${s}">${s}-seater ${s}座</div>`).join('')}</div>
       <div class="label">Vehicle type 車種</div>
       <div class="chips" id="vt">${Object.keys(veh).map(k=>`<div class="chip ${opt.vehicle===k?'on':''}" data-k="${k}">${veh[k]}</div>`).join('')}</div>
+      <div class="label">Price mode 價格模式</div>
+      <div class="chips" id="pm">${[['meter','Meter 咪錶'],['metertip','Meter + Tip 咪錶＋貼士'],['fixed','Fixed 一口價'],['company','Company 公司價']].map(m=>`<div class="chip ${opt.pmode===m[0]?'on':''}" data-k="${m[0]}">${m[1]}</div>`).join('')}</div>
       <div class="optrow" id="schd"><div class="ic">🕒</div><div class="tx">Schedule 預約<small>${opt.sched?'Scheduled 已預約':'Pickup now 即時'}</small></div><div class="v">${opt.sched?'2 hrs later':'Now 即時'}</div></div>
       <div class="optrow" id="stop"><div class="ic">➕</div><div class="tx">Add a stop 加中途站<small>multi-stop 可加 1–3 站</small></div><div class="v">${opt._stop?'+1 stop':'None'}</div></div>
       <div class="optrow" id="flt"><div class="ic">🚖</div><div class="tx">Partner fleet 車隊<small>Fly Taxi · Big Boss · Amigo</small></div><div class="v">${opt.fleet?'On 已選':'Off'}</div></div>
@@ -535,6 +582,7 @@ const Passenger = {
     document.querySelectorAll('#tn .chip').forEach(c=>c.onclick=()=>{opt.tunnel=c.dataset.k;this.options();});
     document.querySelectorAll('#st .o').forEach(o=>o.onclick=()=>{opt.seats=+o.dataset.s;this.options();});
     document.querySelectorAll('#vt .chip').forEach(c=>c.onclick=()=>{opt.vehicle=c.dataset.k;this.options();});
+    document.querySelectorAll('#pm .chip').forEach(c=>c.onclick=()=>{opt.pmode=c.dataset.k;this.options();});
     $('#schd').onclick=()=>{opt.sched=!opt.sched;this.options();};
     $('#stop').onclick=()=>{opt._stop=!opt._stop;this.options();};
     $('#flt').onclick=()=>{opt.fleet=!opt.fleet;this.options();};
@@ -545,20 +593,23 @@ const Passenger = {
     document.querySelectorAll('.pay[data-k]').forEach(el=>el.onclick=()=>{opt.pay=el.dataset.k;this.confirm();});
     $('#pd').onclick=()=>this.confirm();
   },
-  match(total){ showBack(false); $('#radar').style.display='flex';
-    idle.forEach(m=>m.setOpacity&&m.setOpacity(.5)); if(map)map.panTo(curPickup.ll);
+  match(total){ showBack(false); this.accepted=false; $('#radar').style.display='flex';
+    idle.forEach(m=>m.setOpacity&&m.setOpacity(.5)); if(map)map.panTo(curPickup.ll,{animate:true});
     this.reqId='r'+Math.floor(Math.random()*1e6);
-    setSheet(`<div class="sh-title">Finding your taxi…<span class="cn">派緊單到公海…</span></div><div class="sh-sub">Broadcasting to nearby drivers · 廣播畀附近司機${live()?' · live 連線中':''}</div>
-      <div class="statusline" style="margin-top:14px"><span class="pulse"></span>${PLACES.length} drivers can see your job</div>
+    const drv=7+Math.floor(Math.random()*7);
+    setSheet(`<div class="sh-title">Finding your taxi…<span class="cn">派緊單畀附近司機…</span></div>
+      <div class="sh-sub">Open job pool 公海 · ${live()?'live 連線中 🟢':'broadcasting 廣播中'}</div>
+      <div class="statusline" style="margin-top:14px"><span class="pulse"></span><span id="msStat">${drv} drivers notified · ${drv} 位司機收到</span></div>
       <button class="cta ghost" id="cxl" style="margin-top:16px">Cancel · 取消</button>`);
-    $('#cxl').onclick=()=>{ if(this.jobTopic)unsub(this.jobTopic); this.confirm(); };
+    $('#cxl').onclick=()=>{ if(this.jobTopic)unsub(this.jobTopic); clearTimeout(this.simT); this.confirm(); };
     // publish to the pool so a real driver (other phone) can take it
     const job={id:this.reqId,name:USER?.name||'Passenger',pickup:curPickup,dest:curDest,fare:total,tip:opt.tip,km:lastRoute.km,min:lastRoute.min};
     this.jobTopic=`${ROOM}/job/${this.reqId}`;
     sub(this.jobTopic,(m)=>this.onDriverMsg(m));
     pub(`${ROOM}/req`,job);
-    // fallback: if no real driver accepts, a simulated driver does
-    this.simT=later(()=>this.simDriver(total), 5200);
+    later(()=>{const s=$('#msStat');if(s)s.textContent='A driver is responding… 有司機應緊單…';},1400);
+    // fallback: if no real driver accepts within ~3s, a nearby driver auto-accepts
+    this.simT=later(()=>this.simDriver(total), 2900);
   },
   onDriverMsg(m){
     if(m.type==='accept' && !this.accepted){ this.accepted=true; clearTimeout(this.simT); $('#radar').style.display='none';
@@ -605,29 +656,48 @@ const Passenger = {
     const total=this.curTotal();
     this.trip = await osrmRoute(curPickup.ll, curDest.ll);
     setSheet(`<div class="statusline"><span class="pulse"></span>On trip<span class="cn" style="margin:0;opacity:.7">行程中 · 前往 ${curDest.n}</span></div>
-      <div class="meter"><div class="m" id="mt"><small>HK$</small>29</div><div class="r">${curDest.n}<br><span id="mleft">~${this.trip.min} min · 仲有約 ${this.trip.min} 分鐘</span></div></div>`);
+      <div class="meter"><div class="m" id="mt"><small>HK$</small>29</div><div class="r">${curDest.n}<br><span id="mleft">~${this.trip.min} min · 仲有約 ${this.trip.min} 分鐘</span></div></div>
+      <div class="actions" style="margin-top:12px">
+        <div class="act" id="shareT"><span class="ic">📤</span>Share trip 分享</div>
+        <div class="act" id="callD"><span class="ic">📞</span>Call 致電</div>
+        <div class="act" id="sosB" style="border-color:#f1c5bb;color:#cf5126"><span class="ic">🆘</span>SOS 求助</div>
+      </div>`);
+    $('#shareT').onclick=()=>toast('Live trip link shared · 已分享實時行程');
+    $('#callD').onclick=()=>toast('Calling driver… 致電司機中…');
+    $('#sosB').onclick=()=>toast('Emergency: 999 & share location ready · 緊急求助已備妥');
     animateAlong(this.carM,this.trip.path,8500,(p)=>{const amt=Math.round(29+(total-29)*p);$('#mt')&&($('#mt').innerHTML=`<small>HK$</small>${amt}`);const m=Math.max(0,Math.round((1-p)*this.trip.min));$('#mleft')&&($('#mleft').textContent=`~${m} min · 仲有約 ${m} 分鐘`);},()=>this.pay(false));
   },
   ontripRemote(){ setSheet(`<div class="statusline"><span class="pulse"></span>On trip<span class="cn" style="margin:0;opacity:.7">行程中</span></div><div class="meter"><div class="m"><small>HK$</small>${this.curTotal()}</div><div class="r">${curDest.n}</div></div>`); },
-  curTotal(){ const tunnel=opt.tunnel!=='none'&&lastRoute.km>3.5; return fareFor(lastRoute.km,tunnel)+opt.tip; },
+  curTotal(){ const tunnel=opt.tunnel!=='none'&&lastRoute.km>3.5; const fare=fareFor(lastRoute.km,tunnel); const disc=PROMOS[opt.promo]||0; return fare-Math.round(fare*disc/100)+opt.tip; },
   pay(remote){ showBack(false); const total=this.curTotal(); const tunnel=opt.tunnel!=='none'&&lastRoute.km>3.5; const pay=PAYS[opt.pay];
+    const disc=PROMOS[opt.promo]||0, discAmt=Math.round(fareFor(lastRoute.km,tunnel)*disc/100);
     setSheet(`<div class="sh-title">Trip complete<span class="cn">行程完成</span></div>
-      <div class="sh-sub">${curPickup.n} → ${curDest.n} · ${lastRoute.km.toFixed(1)} km</div>
+      <div class="sh-sub">${curPickup.n} → ${curDest.n} · ${lastRoute.km.toFixed(1)} km · ~${lastRoute.min} min</div>
       <div class="brk">
         <div class="li"><span>Metered fare 咪錶</span><span>HK$${fareFor(lastRoute.km,false)}</span></div>
         ${tunnel?'<div class="li"><span>Tunnel toll 隧道費</span><span>HK$10</span></div>':''}
+        ${discAmt?`<div class="li"><span>Promo ${opt.promo} 優惠碼</span><span style="color:var(--green)">− HK$${discAmt}</span></div>`:''}
         <div class="li"><span>Tip 貼士</span><span>HK$${opt.tip}</span></div>
         <div class="li tot"><span>Total 總額</span><span>HK$${total}</span></div></div>
       <div class="pay" style="margin-top:12px"><div class="logo" style="background:${pay[2]}">${pay[0]}</div><div class="tx">${pay[1]}</div></div>
       <button class="cta" id="payb">Pay HK$${total} · 付款</button>`);
-    $('#payb').onclick=()=>{ $('#doneT').textContent='Paid · 已付款'; $('#doneS').textContent=`HK$${total}.00 · ${pay[1]}`; $('#done').style.display='flex'; later(()=>{$('#done').style.display='none';this.receipt(total);},1700); };
+    $('#payb').onclick=()=>{ HISTORY.unshift({from:curPickup.n,to:curDest.n,km:lastRoute.km.toFixed(1),total,pay:pay[1],driver:this.driver?.name||'Driver'});
+      $('#doneT').textContent='Paid · 已付款'; $('#doneS').textContent=`HK$${total}.00 · ${pay[1]}`; $('#done').style.display='flex'; later(()=>{$('#done').style.display='none';this.receipt(total);},1700); };
   },
   receipt(total){ showBack(false); $('#replay').style.display='flex'; let r=5;
-    setSheet(`<div class="sh-title">Rate your trip<span class="cn">為行程評分</span></div><div class="sh-sub">${this.driver.name}</div>
+    setSheet(`<div class="sh-title">Rate your trip<span class="cn">為行程評分</span></div><div class="sh-sub">${this.driver.name} · ${this.driver.plate||''}</div>
       <div class="stars" id="stars">${[1,2,3,4,5].map(i=>`<span data-i="${i}" class="on">★</span>`).join('')}</div>
-      <div class="brk"><div class="li"><span>Paid 已付 · ${PAYS[opt.pay][1]}</span><span style="color:var(--green);font-weight:800">HK$${total}.00 ✓</span></div></div>
+      <div class="chips" style="justify-content:center">
+        <div class="chip" id="favD">♡ Favourite 加最愛</div>
+        <div class="chip" id="rwd">🎁 Reward 打賞</div>
+        <div class="chip" id="rcpt">🧾 E-receipt 收據</div>
+      </div>
+      <div class="brk" style="margin-top:10px"><div class="li"><span>Paid 已付 · ${PAYS[opt.pay][1]}</span><span style="color:var(--green);font-weight:800">HK$${total}.00 ✓</span></div></div>
       <button class="cta dark" id="fin">Done · 完成</button>`);
     document.querySelectorAll('#stars span').forEach(s=>s.onclick=()=>{r=+s.dataset.i;document.querySelectorAll('#stars span').forEach(x=>x.classList.toggle('on',+x.dataset.i<=r));});
+    $('#favD').onclick=()=>{const b=$('#favD');b.classList.add('on');b.textContent='♥ Favourited 已加最愛';toast('Added to favourite drivers · 已加最愛司機');};
+    $('#rwd').onclick=()=>toast('Reward sent · 已打賞司機 +$10');
+    $('#rcpt').onclick=()=>toast('E-receipt sent · 已發送電子收據');
     $('#fin').onclick=()=>{ this.accepted=false; if(this.jobTopic)unsub(this.jobTopic); this.start(); };
   },
 };
@@ -670,9 +740,40 @@ const Driver = {
         <div class="earn"><b>HK$${this.earn}</b><small>${this.trips} trips 今日</small></div></div>
       <div class="sh-sub" style="margin:8px 0 2px">Open job pool 公海 · swipe a card right to accept 向右拉接單</div>
       <div id="jobs">${this.jobs.length?this.jobs.map(j=>this.jobCard(j)).join(''):'<div class="note" style="padding:18px;text-align:center">Waiting for jobs… 等緊柯打…</div>'}</div>
-      <button class="cta ghost" id="goff" style="margin-top:14px">Go offline · 落線收工</button>`);
+      <div class="actions" style="margin-top:12px">
+        <div class="act" id="postJob"><span class="ic">📣</span>Post job 出貨</div>
+        <div class="act" id="records"><span class="ic">📊</span>Records 記錄</div>
+        <div class="act" id="goff"><span class="ic">⏻</span>Offline 收工</div>
+      </div>`);
     $('#goff').onclick=()=>{ this.online=false; clearTimers(); unsub(`${ROOM}/req`); $('#brand').classList.remove('online'); $('#brandTx').textContent='Driver 司機'; this.start(); };
+    $('#postJob').onclick=()=>this.postJob();
+    $('#records').onclick=()=>this.records();
     this.jobs.forEach(j=>this.bindSwipe(j));
+  },
+  postJob(){ showBack(false); this._pj={from:PLACES[1],to:PLACES[0]};
+    const opts=PLACES.map((p,i)=>`${p.n}`);
+    const render=()=>{ const km=haversine(this._pj.from.ll,this._pj.to.ll), fare=fareFor(km,km>3.5);
+      setSheet(`<div class="sh-title">Post a job 出貨<span class="cn">放柯打去公海（轉介）</span></div>
+        <div class="sh-sub">Relay a fare to the open pool · 將柯打放出畀其他司機</div>
+        <div class="label">Pickup 上客點</div><div class="chips" id="pjF">${PLACES.map((p,i)=>`<div class="chip ${this._pj.from===p?'on':''}" data-i="${i}">${p.n}</div>`).join('')}</div>
+        <div class="label">Destination 目的地</div><div class="chips" id="pjT">${PLACES.map((p,i)=>`<div class="chip ${this._pj.to===p?'on':''}" data-i="${i}">${p.n}</div>`).join('')}</div>
+        <div class="meter" style="margin-top:14px"><div class="m"><small>HK$</small>${fare}</div><div class="r">${km.toFixed(1)} km<br>est. fare 預估</div></div>
+        <button class="cta" id="pjGo">Post to pool · 放出公海</button>
+        <button class="cta ghost" id="pjBack" style="margin-top:10px">Back · 返回</button>`);
+      document.querySelectorAll('#pjF .chip').forEach(c=>c.onclick=()=>{this._pj.from=PLACES[+c.dataset.i];render();});
+      document.querySelectorAll('#pjT .chip').forEach(c=>c.onclick=()=>{this._pj.to=PLACES[+c.dataset.i];render();});
+      $('#pjBack').onclick=()=>this.pool();
+      $('#pjGo').onclick=()=>{ const id='post'+Math.floor(Math.random()*1e6); const f=this._pj.from,t=this._pj.to,k=haversine(f.ll,t.ll);
+        pub(`${ROOM}/req`,{id,name:'Relay 轉介',pickup:{n:f.n,c:f.c,ll:f.ll},dest:{n:t.n,c:t.c,ll:t.ll},fare:fareFor(k,k>3.5),tip:0,km:k,min:Math.max(4,Math.round(k/0.45))});
+        toast('Posted to the pool · 已放出公海'); this.pool(); };
+    }; render();
+  },
+  records(){ showBack(false);
+    setSheet(`<div class="sh-title">Today's records 今日記錄<span class="cn">收入與行程</span></div>
+      <div class="meter" style="margin-top:12px"><div class="m"><small>HK$</small>${this.earn}</div><div class="r">Earnings 收入<br>${this.trips} trips 程</div></div>
+      <div style="margin-top:10px">${(this.log&&this.log.length)?this.log.map(l=>`<div class="dest"><div class="ic">🚕</div><div class="tx"><b>${l.from} → ${l.to}</b><small>completed 已完成</small></div><div class="km">+HK$${l.fare}</div></div>`).join(''):'<div class="note">No trips yet today — accept a job from the pool. 今日未有行程。</div>'}</div>
+      <button class="cta ghost" id="recBack" style="margin-top:14px">Back to pool · 返回公海</button>`);
+    $('#recBack').onclick=()=>this.pool();
   },
   jobCard(j){ return `<div class="jobwrap"><div class="job" id="job_${j.id}">
       <div class="top"><div class="fare"><small>HK$</small>${j.fare}</div>${j.tip?`<div class="tip">＋$${j.tip} 貼士</div>`:''}</div>
@@ -719,7 +820,7 @@ const Driver = {
     animateAlong(this.meM,r.path,8000,(p,ll)=>{this.loc=ll;if(!j.sim)pub(`${ROOM}/job/${j.id}`,{type:'loc',ll});const a=Math.round(29+(j.fare-j.tip-29)*p);$('#mt')&&($('#mt').innerHTML=`<small>HK$</small>${a}`);const m=Math.max(0,Math.round((1-p)*j.min));$('#ml')&&($('#ml').textContent=`~${m} min`);},()=>this.complete(j));
   },
   complete(j){ if(!j.sim)pub(`${ROOM}/job/${j.id}`,{type:'done'});
-    this.earn+=j.fare; this.trips++;
+    this.earn+=j.fare; this.trips++; (this.log=this.log||[]).unshift({from:j.pickup.n,to:j.dest.n,fare:j.fare});
     $('#doneT').textContent='Trip done · 完成行程'; $('#doneS').textContent=`+ HK$${j.fare}.00 earned 已賺`; $('#done').style.display='flex';
     later(()=>{ $('#done').style.display='none';
       setSheet(`<div class="sh-title">Earned HK$${j.fare}<span class="cn">已入帳</span></div>
